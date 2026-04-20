@@ -55,6 +55,7 @@ typedef  struct {
 typedef struct {
     M10_UpdateRateTypeDef UpdateRate;
     uint8_t Constellations;                                         // Set bits with M10_CONSTELLATION_XXX
+    uint64_t UBXOutputMessages;                                     // Set bits with M10_UBX_MSG_XXX_XXX
     uint32_t NMEAOutputMessages;                                    // Set bits with M10_NMEA_MSG_XXX_XXX
     M10_PowerConfigurationTypeDef PowerConfiguration;
     uint32_t PositionUpdatePeriodSeconds;                           // Used if M10_PWR_CFG_PSMOO is selected. 5 <= <value> <= number of seconds in a week
@@ -88,9 +89,7 @@ M10_ErrorTypeDef M10_GnssStart(M10_HandleTypeDef *hm10);
 M10_ErrorTypeDef M10_SetBaudRate(M10_HandleTypeDef *hm10, UBX_BaudRateTypeDef BaudRate, uint8_t Layers);
 
 /* ------ MGA Messages ------ */
-/*
- * Before calling any of the MGA messages, UTC must be set with M10_SetUTC()
-*/
+
 M10_ErrorTypeDef M10_SetUTC(M10_HandleTypeDef *hm10, uint64_t TimestampMs, uint16_t SAccuracy, uint32_t NSAccuracy, uint32_t TimeoutMs);
 M10_ErrorTypeDef M10_ExportNavData(M10_HandleTypeDef *hm10, uint8_t(*HandleDataMessage)(uint8_t *ChunkContent, uint32_t Len), uint32_t *DataLen, uint32_t TimeoutMs);
 M10_ErrorTypeDef M10_ImportNavData(M10_HandleTypeDef *hm10, uint8_t *Data, uint32_t DataLen, uint32_t TimeoutMs);

@@ -8,8 +8,6 @@
 #include <time.h>
 
 static uint8_t get_cfg_value_size(uint32_t key);
-static M10_ErrorTypeDef find_br(M10_HandleTypeDef *hm10, uint32_t *BaudRate);
-static M10_ErrorTypeDef configure_br(M10_HandleTypeDef *hm10, uint32_t BaudRate);
 static M10_ErrorTypeDef parse_timestamp_ms(uint64_t TimestampMs, M10_ParsedTimestampMsTypeDef *ParsedTimestamp);
 static M10_ErrorTypeDef wait_for_mga_ack(M10_HandleTypeDef *hm10, M10_MgaMessageAckInfoCodeTypeDef *AckInfoCode, uint32_t TimeoutMs);
 
@@ -46,19 +44,34 @@ M10_ErrorTypeDef M10_Init(M10_HandleTypeDef *hm10) {
         {.Key = M10_CFG_ITM_KEY_UART1OUTPROT_NMEA, .Value = hm10->DeviceConfig.NMEAOutputMessages > 0}
     };
 
-    // Skip ACK, because of changing communication protocol mid-flight
     if ((err_m10 = M10_SendConfig(hm10, communication_config, sizeof(communication_config) / sizeof(communication_config[0]), hm10->DeviceConfig.ConfigLayers, 0)) != M10_ERROR_OK) {
         return err_m10;
     }
 
-    M10_ConfigDataTypeDef main_config[] = {
+    M10_ConfigDataTypeDef performance_config[] = {
         // Configure update rate
         {.Key = M10_CFG_ITM_KEY_RATE_MEAS, .Value = 1000 / hm10->DeviceConfig.UpdateRate},
 
         // Enable MGA_ACK messages
         {.Key = M10_CFG_ITM_KEY_NAVSPG_ACKAIDING, .Value = 1},
 
-        // Select constelations
+        // Configure power mode
+        {.Key = M10_CFG_ITM_KEY_PM_OPERATEMODE, .Value = (hm10->DeviceConfig.PowerConfiguration)},
+        {.Key = M10_CFG_ITM_KEY_PM_POSUPDATEPERIOD, .Value = (hm10->DeviceConfig.PositionUpdatePeriodSeconds)},
+
+        // Set a navigation model
+        {.Key = M10_CFG_ITM_KEY_NAVSPG_DYNMODEL, .Value = (hm10->DeviceConfig.NavModel)},
+
+        // Configure precision navigation
+        {.Key = M10_CFG_ITM_KEY_NAVSPG_OUTFIL_PDOP, .Value = (hm10->DeviceConfig.PDOP != 0 ? hm10->DeviceConfig.PDOP : 250)},
+        {.Key = M10_CFG_ITM_KEY_NAVSPG_OUTFIL_TDOP, .Value = (hm10->DeviceConfig.TDOP != 0 ? hm10->DeviceConfig.TDOP : 250)}
+    };
+
+    if ((err_m10 = M10_SendConfig(hm10, performance_config, sizeof(performance_config) / sizeof(performance_config[0]), hm10->DeviceConfig.ConfigLayers, 0)) != M10_ERROR_OK) {
+        return err_m10;
+    }
+
+    M10_ConfigDataTypeDef constellations_config[] = {
         {.Key = M10_CFG_ITM_KEY_SIGNAL_GPS_ENA, .Value = (hm10->DeviceConfig.Constellations >> M10_CONSTELLATION_GPS_POS)                       & 0x01},
         {.Key = M10_CFG_ITM_KEY_SIGNAL_GPS_L1CA_ENA, .Value = (hm10->DeviceConfig.Constellations >> M10_CONSTELLATION_GPS_POS)                  & 0x01},
         {.Key = M10_CFG_ITM_KEY_SIGNAL_GAL_ENA, .Value = (hm10->DeviceConfig.Constellations >> M10_CONSTELLATION_GALILEO_POS)                   & 0x01},
@@ -66,9 +79,14 @@ M10_ErrorTypeDef M10_Init(M10_HandleTypeDef *hm10) {
         {.Key = M10_CFG_ITM_KEY_SIGNAL_BDS_ENA, .Value = (hm10->DeviceConfig.Constellations >> M10_CONSTELLATION_BEIDOU_POS)                    & 0x01},
         {.Key = M10_CFG_ITM_KEY_SIGNAL_BDS_B1_ENA, .Value = (hm10->DeviceConfig.Constellations >> M10_CONSTELLATION_BEIDOU_POS)                 & 0x01},
         {.Key = M10_CFG_ITM_KEY_SIGNAL_QZSS_ENA, .Value = (hm10->DeviceConfig.Constellations >> M10_CONSTELLATION_QZSS_POS)                     & 0x01},
-        {.Key = M10_CFG_ITM_KEY_SIGNAL_QZSS_L1CA_ENA, .Value = (hm10->DeviceConfig.Constellations >> M10_CONSTELLATION_QZSS_POS)                & 0x01},
+        {.Key = M10_CFG_ITM_KEY_SIGNAL_QZSS_L1CA_ENA, .Value = (hm10->DeviceConfig.Constellations >> M10_CONSTELLATION_QZSS_POS)                & 0x01}
+    };
 
-        // Set NMEA output messages
+    if ((err_m10 = M10_SendConfig(hm10, constellations_config, sizeof(constellations_config) / sizeof(constellations_config[0]), hm10->DeviceConfig.ConfigLayers, 0)) != M10_ERROR_OK) {
+        return err_m10;
+    }
+
+    M10_ConfigDataTypeDef nmea_config[] = {
         {.Key = M10_CFG_ITM_KEY_MSGOUT_NMEA_ID_DTM_UART1,   .Value = (hm10->DeviceConfig.NMEAOutputMessages >> M10_NMEA_MSG_STD_DTM_POS)        & 0x01},
         {.Key = M10_CFG_ITM_KEY_MSGOUT_NMEA_ID_GBS_UART1,   .Value = (hm10->DeviceConfig.NMEAOutputMessages >> M10_NMEA_MSG_STD_GBS_POS)        & 0x01},
         {.Key = M10_CFG_ITM_KEY_MSGOUT_NMEA_ID_GGA_UART1,   .Value = (hm10->DeviceConfig.NMEAOutputMessages >> M10_NMEA_MSG_STD_GGA_POS)        & 0x01},
@@ -85,24 +103,78 @@ M10_ErrorTypeDef M10_Init(M10_HandleTypeDef *hm10) {
         {.Key = M10_CFG_ITM_KEY_MSGOUT_NMEA_ID_ZDA_UART1,   .Value = (hm10->DeviceConfig.NMEAOutputMessages >> M10_NMEA_MSG_STD_ZDA_POS)        & 0x01},
         {.Key = M10_CFG_ITM_KEY_MSGOUT_PUBX_ID_POLYP_UART1, .Value = (hm10->DeviceConfig.NMEAOutputMessages >> M10_NMEA_MSG_PUBX_CONFIG_POS)    & 0x01},
         {.Key = M10_CFG_ITM_KEY_MSGOUT_PUBX_ID_POLYS_UART1, .Value = (hm10->DeviceConfig.NMEAOutputMessages >> M10_NMEA_MSG_PUBX_POSITION_POS)  & 0x01},
-        {.Key = M10_CFG_ITM_KEY_MSGOUT_PUBX_ID_POLYT_UART1, .Value = (hm10->DeviceConfig.NMEAOutputMessages >> M10_NMEA_MSG_PUBX_RATE_POS)      & 0x01},
-
-        // Set UBX output messages
-        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_PVT_UART1, .Value = 1},
-
-        // Configure power mode
-        {.Key = M10_CFG_ITM_KEY_PM_OPERATEMODE, .Value = (hm10->DeviceConfig.PowerConfiguration)},
-        {.Key = M10_CFG_ITM_KEY_PM_POSUPDATEPERIOD, .Value = (hm10->DeviceConfig.PositionUpdatePeriodSeconds)},
-
-        // Set a navigation model
-        {.Key = M10_CFG_ITM_KEY_NAVSPG_DYNMODEL, .Value = (hm10->DeviceConfig.NavModel)},
-
-        // Configure precision navigation
-        {.Key = M10_CFG_ITM_KEY_NAVSPG_OUTFIL_PDOP, .Value = (hm10->DeviceConfig.PDOP != 0 ? hm10->DeviceConfig.PDOP : 250)},
-        {.Key = M10_CFG_ITM_KEY_NAVSPG_OUTFIL_TDOP, .Value = (hm10->DeviceConfig.TDOP != 0 ? hm10->DeviceConfig.TDOP : 250)}
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_PUBX_ID_POLYT_UART1, .Value = (hm10->DeviceConfig.NMEAOutputMessages >> M10_NMEA_MSG_PUBX_RATE_POS)      & 0x01}
     };
 
-    if ((err_m10 = M10_SendConfig(hm10, main_config, sizeof(main_config) / sizeof(main_config[0]), hm10->DeviceConfig.ConfigLayers, 0)) != M10_ERROR_OK) {
+    if ((err_m10 = M10_SendConfig(hm10, nmea_config, sizeof(nmea_config) / sizeof(nmea_config[0]), hm10->DeviceConfig.ConfigLayers, 0)) != M10_ERROR_OK) {
+        return err_m10;
+    }
+
+    M10_ConfigDataTypeDef ubx_config[] = {
+        /* UBX LOG Messages */
+        // {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_LOG_INFO_UART1,      .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_LOG_INFO_POS)    & 0x01},
+
+        /* UBX MON Messages */
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_MON_COMMS_UART1,     .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_MON_COMMS_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_MON_HW3_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_MON_HW3_POS)     & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_MON_IO_UART1,        .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_MON_IO_POS)      & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_MON_MSGPP_UART1,     .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_MON_MSGPP_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_MON_RF_UART1,        .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_MON_RF_POS)      & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_MON_RXBUF_UART1,     .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_MON_RXBUF_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_MON_RXR_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_MON_RXR_POS)     & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_MON_SPAN_UART1,      .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_MON_SPAN_POS)    & 0x01},
+        // {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_MON_SYS_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_MON_SYS_POS)     & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_MON_TXBUF_UART1,     .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_MON_TXBUF_POS)   & 0x01},
+
+        /* UBX NAV Messages */
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_AOPSTATUS_UART1, .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_AOPSTATUS_POS) & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_CLOCK_UART1,     .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_CLOCK_POS)     & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_COV_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_COV_POS)       & 0x01},
+        // {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_DOP_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_DOP_POS)       & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_EOE_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_EOE_POS)       & 0x01},
+        // {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_GEOFENCE_UART1,  .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_GEOFENCE_POS)  & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_ODO_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_ODO_POS)       & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_ORB_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_ORB_POS)       & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_POSECEF_UART1,   .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_POSECEF_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_POSLLH_UART1,    .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_POSLLH_POS)    & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_PVT_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_PVT_POS)       & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_SAT_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_SAT_POS)       & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_SBAS_UART1,      .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_SBAS_POS)      & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_SIG_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_SIG_POS)       & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_SLAS_UART1,      .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_SLAS_POS)      & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_STATUS_UART1,    .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_STATUS_POS)    & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_TIMEBDS_UART1,   .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_TIMEBDS_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_TIMEGAL_UART1,   .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_TIMEGAL_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_TIMEGLO_UART1,   .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_TIMEGLO_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_TIMEGPS_UART1,   .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_TIMEGPS_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_TIMELS_UART1,    .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_TIMELS_POS)    & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_TIMEQZSS_UART1,  .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_TIMEQZSS_POS)  & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_TIMEUTC_UART1,   .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_TIMEUTC_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_VELECEF_UART1,   .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_VELECEF_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_VELNED_UART1,    .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_VELNED_POS)    & 0x01},
+
+        /* UBX RXM Messages */
+        // {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_RXM_COR_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_RXM_COR_POS)       & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_RXM_MEAS20_UART1,    .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_RXM_MEAS20_POS)    & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_RXM_MEAS50_UART1,    .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_RXM_MEAS50_POS)    & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_RXM_MEASC12_UART1,   .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_RXM_MEASC12_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_RXM_MEASD12_UART1,   .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_RXM_MEASD12_POS)   & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_RXM_MEASX_UART1,     .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_RXM_MEASX_POS)     & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_RXM_RAWX_UART1,      .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_RXM_RAWX_POS)      & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_RXM_RLM_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_RXM_RLM_POS)       & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_RXM_SFRBX_UART1,     .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_RXM_SFRBX_POS)     & 0x01},
+
+        /* UBX SEC Messages */
+        // {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_SEC_SIGLOG_UART1,    .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_SEC_SIGLOG_POS)    & 0x01},
+        // {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_SEC_SIG_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_SEC_SIG_POS)       & 0x01},
+
+        /* UBX TIM Messages */
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_TIM_TM2_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_TIM_TM2_POS)       & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_TIM_TP_UART1,        .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_TIM_TP_POS)        & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_TIM_VRFY_UART1,      .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_TIM_VRFY_POS)      & 0x01},
+    };
+
+    if ((err_m10 = M10_SendConfig(hm10, ubx_config, sizeof(ubx_config) / sizeof(ubx_config[0]), hm10->DeviceConfig.ConfigLayers, 0)) != M10_ERROR_OK) {
         return err_m10;
     }
 

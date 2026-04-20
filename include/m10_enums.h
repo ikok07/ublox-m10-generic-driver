@@ -279,6 +279,59 @@ typedef enum {
     M10_PWR_CFG_PSMCT                           // Power Save Mode Cyclic Tracking. The receiver never fully shuts down — instead it duty-cycles between full tracking and a low-power "dozing" state where it maintains just enough processing to keep track of satellites. Re-acquisition after a doze is much faster than PSMOO because it never fully lost the satellites.
 } M10_PowerConfigurationTypeDef;
 
+/* UBX Message Bit Positions */
+
+#define M10_UBX_MSG_LOG_INFO_POS                              0
+#define M10_UBX_MSG_MON_COMMS_POS                             1
+#define M10_UBX_MSG_MON_HW3_POS                               2
+#define M10_UBX_MSG_MON_IO_POS                                3
+#define M10_UBX_MSG_MON_MSGPP_POS                             4
+#define M10_UBX_MSG_MON_RF_POS                                5
+#define M10_UBX_MSG_MON_RXBUF_POS                             6
+#define M10_UBX_MSG_MON_RXR_POS                               7
+#define M10_UBX_MSG_MON_SPAN_POS                              8
+#define M10_UBX_MSG_MON_SYS_POS                               9
+#define M10_UBX_MSG_MON_TXBUF_POS                             10
+#define M10_UBX_MSG_NAV_AOPSTATUS_POS                         11
+#define M10_UBX_MSG_NAV_CLOCK_POS                             12
+#define M10_UBX_MSG_NAV_COV_POS                               13
+#define M10_UBX_MSG_NAV_DOP_POS                               14
+#define M10_UBX_MSG_NAV_EOE_POS                               15
+#define M10_UBX_MSG_NAV_GEOFENCE_POS                          16
+#define M10_UBX_MSG_NAV_ODO_POS                               17
+#define M10_UBX_MSG_NAV_ORB_POS                               18
+#define M10_UBX_MSG_NAV_POSECEF_POS                           19
+#define M10_UBX_MSG_NAV_POSLLH_POS                            20
+#define M10_UBX_MSG_NAV_PVT_POS                               21
+#define M10_UBX_MSG_NAV_SAT_POS                               22
+#define M10_UBX_MSG_NAV_SBAS_POS                              23
+#define M10_UBX_MSG_NAV_SIG_POS                               24
+#define M10_UBX_MSG_NAV_SLAS_POS                              25
+#define M10_UBX_MSG_NAV_STATUS_POS                            26
+#define M10_UBX_MSG_NAV_TIMEBDS_POS                           27
+#define M10_UBX_MSG_NAV_TIMEGAL_POS                           28
+#define M10_UBX_MSG_NAV_TIMEGLO_POS                           29
+#define M10_UBX_MSG_NAV_TIMEGPS_POS                           30
+#define M10_UBX_MSG_NAV_TIMELS_POS                            31
+#define M10_UBX_MSG_NAV_TIMEQZSS_POS                          32
+#define M10_UBX_MSG_NAV_TIMEUTC_POS                           33
+#define M10_UBX_MSG_NAV_VELECEF_POS                           34
+#define M10_UBX_MSG_NAV_VELNED_POS                            35
+#define M10_UBX_MSG_RXM_COR_POS                               36
+#define M10_UBX_MSG_RXM_MEAS20_POS                            37
+#define M10_UBX_MSG_RXM_MEAS50_POS                            38
+#define M10_UBX_MSG_RXM_MEASC12_POS                           39
+#define M10_UBX_MSG_RXM_MEASD12_POS                           40
+#define M10_UBX_MSG_RXM_MEASX_POS                             41
+#define M10_UBX_MSG_RXM_RAWX_POS                              42
+#define M10_UBX_MSG_RXM_RLM_POS                               43
+#define M10_UBX_MSG_RXM_SFRBX_POS                             44
+#define M10_UBX_MSG_SEC_SIGLOG_POS                            45
+#define M10_UBX_MSG_SEC_SIG_POS                               46
+#define M10_UBX_MSG_TIM_TM2_POS                               47
+#define M10_UBX_MSG_TIM_TP_POS                                48
+#define M10_UBX_MSG_TIM_VRFY_POS                              49
+
 /* NMEA Message Bit Positions */
 #define M10_NMEA_MSG_STD_DTM_POS                                    0
 #define M10_NMEA_MSG_STD_GAQ_POS                                    1
@@ -306,6 +359,71 @@ typedef enum {
 #define M10_NMEA_MSG_PUBX_RATE_POS                                  23
 #define M10_NMEA_MSG_PUBX_SVSTATUS_POS                              24
 #define M10_NMEA_MSG_PUBX_TIME_POS                                  25
+
+/* UBX Message Bitmask Enum */
+typedef enum {
+    /* UBX LOG Messages */
+    M10_UBX_MSG_LOG_INFO          = (1ULL << M10_UBX_MSG_LOG_INFO_POS),
+
+    /* UBX MON Messages */
+    M10_UBX_MSG_MON_COMMS         = (1ULL << M10_UBX_MSG_MON_COMMS_POS),
+    M10_UBX_MSG_MON_HW3           = (1ULL << M10_UBX_MSG_MON_HW3_POS),
+    M10_UBX_MSG_MON_IO            = (1ULL << M10_UBX_MSG_MON_IO_POS),
+    M10_UBX_MSG_MON_MSGPP         = (1ULL << M10_UBX_MSG_MON_MSGPP_POS),
+    M10_UBX_MSG_MON_RF            = (1ULL << M10_UBX_MSG_MON_RF_POS),
+    M10_UBX_MSG_MON_RXBUF         = (1ULL << M10_UBX_MSG_MON_RXBUF_POS),
+    M10_UBX_MSG_MON_RXR           = (1ULL << M10_UBX_MSG_MON_RXR_POS),
+    M10_UBX_MSG_MON_SPAN          = (1ULL << M10_UBX_MSG_MON_SPAN_POS),
+    M10_UBX_MSG_MON_SYS           = (1ULL << M10_UBX_MSG_MON_SYS_POS),
+    M10_UBX_MSG_MON_TXBUF         = (1ULL << M10_UBX_MSG_MON_TXBUF_POS),
+
+    /* UBX NAV Messages */
+    M10_UBX_MSG_NAV_AOPSTATUS     = (1ULL << M10_UBX_MSG_NAV_AOPSTATUS_POS),
+    M10_UBX_MSG_NAV_CLOCK         = (1ULL << M10_UBX_MSG_NAV_CLOCK_POS),
+    M10_UBX_MSG_NAV_COV           = (1ULL << M10_UBX_MSG_NAV_COV_POS),
+    M10_UBX_MSG_NAV_DOP           = (1ULL << M10_UBX_MSG_NAV_DOP_POS),
+    M10_UBX_MSG_NAV_EOE           = (1ULL << M10_UBX_MSG_NAV_EOE_POS),
+    M10_UBX_MSG_NAV_GEOFENCE      = (1ULL << M10_UBX_MSG_NAV_GEOFENCE_POS),
+    M10_UBX_MSG_NAV_ODO           = (1ULL << M10_UBX_MSG_NAV_ODO_POS),
+    M10_UBX_MSG_NAV_ORB           = (1ULL << M10_UBX_MSG_NAV_ORB_POS),
+    M10_UBX_MSG_NAV_POSECEF       = (1ULL << M10_UBX_MSG_NAV_POSECEF_POS),
+    M10_UBX_MSG_NAV_POSLLH        = (1ULL << M10_UBX_MSG_NAV_POSLLH_POS),
+    M10_UBX_MSG_NAV_PVT           = (1ULL << M10_UBX_MSG_NAV_PVT_POS),
+    M10_UBX_MSG_NAV_SAT           = (1ULL << M10_UBX_MSG_NAV_SAT_POS),
+    M10_UBX_MSG_NAV_SBAS          = (1ULL << M10_UBX_MSG_NAV_SBAS_POS),
+    M10_UBX_MSG_NAV_SIG           = (1ULL << M10_UBX_MSG_NAV_SIG_POS),
+    M10_UBX_MSG_NAV_SLAS          = (1ULL << M10_UBX_MSG_NAV_SLAS_POS),
+    M10_UBX_MSG_NAV_STATUS        = (1ULL << M10_UBX_MSG_NAV_STATUS_POS),
+    M10_UBX_MSG_NAV_TIMEBDS       = (1ULL << M10_UBX_MSG_NAV_TIMEBDS_POS),
+    M10_UBX_MSG_NAV_TIMEGAL       = (1ULL << M10_UBX_MSG_NAV_TIMEGAL_POS),
+    M10_UBX_MSG_NAV_TIMEGLO       = (1ULL << M10_UBX_MSG_NAV_TIMEGLO_POS),
+    M10_UBX_MSG_NAV_TIMEGPS       = (1ULL << M10_UBX_MSG_NAV_TIMEGPS_POS),
+    M10_UBX_MSG_NAV_TIMELS        = (1ULL << M10_UBX_MSG_NAV_TIMELS_POS),
+    M10_UBX_MSG_NAV_TIMEQZSS      = (1ULL << M10_UBX_MSG_NAV_TIMEQZSS_POS),
+    M10_UBX_MSG_NAV_TIMEUTC       = (1ULL << M10_UBX_MSG_NAV_TIMEUTC_POS),
+    M10_UBX_MSG_NAV_VELECEF       = (1ULL << M10_UBX_MSG_NAV_VELECEF_POS),
+    M10_UBX_MSG_NAV_VELNED        = (1ULL << M10_UBX_MSG_NAV_VELNED_POS),
+
+    /* UBX RXM Messages */
+    M10_UBX_MSG_RXM_COR           = (1ULL << M10_UBX_MSG_RXM_COR_POS),
+    M10_UBX_MSG_RXM_MEAS20        = (1ULL << M10_UBX_MSG_RXM_MEAS20_POS),
+    M10_UBX_MSG_RXM_MEAS50        = (1ULL << M10_UBX_MSG_RXM_MEAS50_POS),
+    M10_UBX_MSG_RXM_MEASC12       = (1ULL << M10_UBX_MSG_RXM_MEASC12_POS),
+    M10_UBX_MSG_RXM_MEASD12       = (1ULL << M10_UBX_MSG_RXM_MEASD12_POS),
+    M10_UBX_MSG_RXM_MEASX         = (1ULL << M10_UBX_MSG_RXM_MEASX_POS),
+    M10_UBX_MSG_RXM_RAWX          = (1ULL << M10_UBX_MSG_RXM_RAWX_POS),
+    M10_UBX_MSG_RXM_RLM           = (1ULL << M10_UBX_MSG_RXM_RLM_POS),
+    M10_UBX_MSG_RXM_SFRBX         = (1ULL << M10_UBX_MSG_RXM_SFRBX_POS),
+
+    /* UBX SEC Messages */
+    M10_UBX_MSG_SEC_SIGLOG        = (1ULL << M10_UBX_MSG_SEC_SIGLOG_POS),
+    M10_UBX_MSG_SEC_SIG           = (1ULL << M10_UBX_MSG_SEC_SIG_POS),
+
+    /* UBX TIM Messages */
+    M10_UBX_MSG_TIM_TM2           = (1ULL << M10_UBX_MSG_TIM_TM2_POS),
+    M10_UBX_MSG_TIM_TP            = (1ULL << M10_UBX_MSG_TIM_TP_POS),
+    M10_UBX_MSG_TIM_VRFY          = (1ULL << M10_UBX_MSG_TIM_VRFY_POS),
+} m10_ubx_uart1_msg_t;
 
 /* NMEA Message Bitmask Enum */
 typedef enum {
