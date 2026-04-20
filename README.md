@@ -27,7 +27,7 @@ A generic, portable **C driver** for the **u-blox M10** GNSS receiver family. Co
 
 | Component | Purpose |
 |-----------|---------|
-| [`ubx`](https://github.com/<your-repo>/ubx) | UBX framing, UART transport, message pool |
+| [`ubx`](https://github.com/ikok07/ublox-ubx-generic-driver) | UBX framing, UART transport, message pool |
 
 The driver has no platform-specific dependencies. It relies on the `ubx` component for all hardware abstraction (UART read/write, tick timer). Adapt `ubx` to your target platform/RTOS.
 
