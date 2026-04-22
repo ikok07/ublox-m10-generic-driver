@@ -130,7 +130,7 @@ M10_ErrorTypeDef M10_Init(M10_HandleTypeDef *hm10) {
         {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_AOPSTATUS_UART1, .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_AOPSTATUS_POS) & 0x01},
         {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_CLOCK_UART1,     .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_CLOCK_POS)     & 0x01},
         {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_COV_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_COV_POS)       & 0x01},
-        // {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_DOP_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_DOP_POS)       & 0x01},
+        {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_DOP_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_DOP_POS)       & 0x01},
         {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_EOE_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_EOE_POS)       & 0x01},
         // {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_GEOFENCE_UART1,  .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_GEOFENCE_POS)  & 0x01},
         {.Key = M10_CFG_ITM_KEY_MSGOUT_UBX_NAV_ODO_UART1,       .Value = (hm10->DeviceConfig.UBXOutputMessages >> M10_UBX_MSG_NAV_ODO_POS)       & 0x01},
