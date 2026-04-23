@@ -54,6 +54,7 @@ typedef  struct {
 
 typedef struct {
     M10_UpdateRateTypeDef UpdateRate;
+    uint16_t MeasSolutionRatio;                                    // Ratio of number of measurements to number of navigation solutions (Min 1; Max 127)
     uint8_t Constellations;                                         // Set bits with M10_CONSTELLATION_XXX
     uint64_t UBXOutputMessages;                                     // Set bits with M10_UBX_MSG_XXX_XXX
     uint32_t NMEAOutputMessages;                                    // Set bits with M10_NMEA_MSG_XXX_XXX

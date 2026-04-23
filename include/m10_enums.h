@@ -21,7 +21,8 @@ typedef enum {
     M10_ERROR_MGA_NOACK,
     M10_ERROR_MGA_NOT_ACCEPTED,
     M10_ERROR_MGA_DATA_NOT_HANDLED,
-    M10_ERROR_INVALID_IMPORT_DATA
+    M10_ERROR_INVALID_IMPORT_DATA,
+    M10_ERROR_INVALID_MEAS_SOLUTION_RATIO
 } M10_ErrorTypeDef;
 
 typedef enum {
@@ -176,7 +177,6 @@ typedef enum {
     M10_URATE_17HZ,
     M10_URATE_18HZ,
 } M10_UpdateRateTypeDef;
-
 
 typedef enum {
     M10_BBR_MSK_HOT_START = 0x0000,

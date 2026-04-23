@@ -31,6 +31,8 @@ M10_ErrorTypeDef M10_InitUART(M10_HandleTypeDef *hm10) {
 M10_ErrorTypeDef M10_Init(M10_HandleTypeDef *hm10) {
     M10_ErrorTypeDef err_m10 = M10_ERROR_OK;
 
+    if (hm10->DeviceConfig.MeasSolutionRatio > 127) return M10_ERROR_INVALID_MEAS_SOLUTION_RATIO;
+
     // Stop GNSS
     M10_GnssStop(hm10);
 
@@ -51,6 +53,7 @@ M10_ErrorTypeDef M10_Init(M10_HandleTypeDef *hm10) {
     M10_ConfigDataTypeDef performance_config[] = {
         // Configure update rate
         {.Key = M10_CFG_ITM_KEY_RATE_MEAS, .Value = 1000 / hm10->DeviceConfig.UpdateRate},
+        {.Key = M10_CFG_ITM_KEY_RATE_NAV, .Value = hm10->DeviceConfig.MeasSolutionRatio > 0 ? hm10->DeviceConfig.MeasSolutionRatio : 1},
 
         // Enable MGA_ACK messages
         {.Key = M10_CFG_ITM_KEY_NAVSPG_ACKAIDING, .Value = 1},
