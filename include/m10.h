@@ -47,14 +47,29 @@ typedef struct {
     uint32_t Value;
 } M10_ConfigDataTypeDef;
 
-typedef  struct {
+typedef struct {
+    uint8_t *Data;
+    uint32_t Len;
+} M10_ExportDataChunkTypeDef;
+
+typedef struct {
     UBX_BaudRateTypeDef BaudRate;
     M10_DeviceVersionTypeDef Version;
 } M10_ConnectionInfoTypeDef;
 
 typedef struct {
+    uint8_t Enabled;
+    uint8_t SyncWithGNSS;
+    uint8_t RisingEdgePolarity;                                     // Rising edge at top of seconds
+    uint32_t PeriodMicroSeconds;
+    uint32_t PeriodLockedMicroSeconds;                              // Time period when locked to GNSS time
+    uint32_t PulseLengthMicroSeconds;
+    uint32_t PulseLengthLockedMicroSeconds;                         // The pulse length when locked to GNSS time
+} M10_TimePulseConfigTypeDef;
+
+typedef struct {
     M10_UpdateRateTypeDef UpdateRate;
-    uint16_t MeasSolutionRatio;                                    // Ratio of number of measurements to number of navigation solutions (Min 1; Max 127)
+    uint16_t MeasSolutionRatio;                                     // Ratio of number of measurements to number of navigation solutions (Min 1; Max 127)
     uint8_t Constellations;                                         // Set bits with M10_CONSTELLATION_XXX
     uint64_t UBXOutputMessages;                                     // Set bits with M10_UBX_MSG_XXX_XXX
     uint32_t NMEAOutputMessages;                                    // Set bits with M10_NMEA_MSG_XXX_XXX
@@ -64,6 +79,7 @@ typedef struct {
     uint16_t PDOP;                                                  // Position Dilution of Precision (Lower is more restrictive.). Default 250 (250 / 10 = 25)
     uint16_t TDOP;                                                  // Time Dilution of Precision (Lower is more restrictive.). Default 250 (250 / 10 = 25)
     uint8_t ConfigLayers;                                           // Set bits with M10_CONFIG_LAYER_XXX
+    M10_TimePulseConfigTypeDef TimePulse;                           // Time pulse configuration
 } M10_ConfigTypeDef;
 
 typedef struct {
@@ -92,7 +108,8 @@ M10_ErrorTypeDef M10_SetBaudRate(M10_HandleTypeDef *hm10, UBX_BaudRateTypeDef Ba
 /* ------ MGA Messages ------ */
 
 M10_ErrorTypeDef M10_SetUTC(M10_HandleTypeDef *hm10, uint64_t TimestampMs, uint16_t SAccuracy, uint32_t NSAccuracy, uint32_t TimeoutMs);
-M10_ErrorTypeDef M10_ExportNavData(M10_HandleTypeDef *hm10, uint8_t(*HandleDataMessage)(uint8_t *ChunkContent, uint32_t Len), uint32_t *DataLen, uint32_t TimeoutMs);
+M10_ErrorTypeDef M10_ExportNavData(M10_HandleTypeDef *hm10, uint8_t(*HandleDataMessage)(M10_ExportDataChunkTypeDef *ExportData), uint32_t *TotalChunks, uint32_t TimeoutMs);
 M10_ErrorTypeDef M10_ImportNavData(M10_HandleTypeDef *hm10, uint8_t *Data, uint32_t DataLen, uint32_t TimeoutMs);
+M10_ErrorTypeDef M10_ImportLastKnownPos(M10_HandleTypeDef *hm10, int32_t Latitude, int32_t Longitude, int32_t Altitude, uint32_t PosAccuracyCm, uint32_t TimeoutMs);
 
 #endif //ESP32_BLE_GPS_M10_H

@@ -43,7 +43,16 @@ M10_ErrorTypeDef M10_Init(M10_HandleTypeDef *hm10) {
 
         // Select UXB and NMEA as output protocols
         {.Key = M10_CFG_ITM_KEY_UART1OUTPROT_UBX, .Value = 1},
-        {.Key = M10_CFG_ITM_KEY_UART1OUTPROT_NMEA, .Value = hm10->DeviceConfig.NMEAOutputMessages > 0}
+        {.Key = M10_CFG_ITM_KEY_UART1OUTPROT_NMEA, .Value = hm10->DeviceConfig.NMEAOutputMessages > 0},
+
+        // Configure Time Pulse
+        {.Key = M10_CFG_ITM_KEY_TP_TP1_ENA, .Value = hm10->DeviceConfig.TimePulse.Enabled},
+        {.Key = M10_CFG_ITM_KEY_TP_SYNC_GNSS_TP1, .Value = hm10->DeviceConfig.TimePulse.SyncWithGNSS},
+        {.Key = M10_CFG_ITM_KEY_TP_PERIOD_TP1, .Value = hm10->DeviceConfig.TimePulse.PeriodMicroSeconds},
+        {.Key = M10_CFG_ITM_KEY_TP_PERIOD_LOCK_TP1, .Value = hm10->DeviceConfig.TimePulse.PeriodLockedMicroSeconds},
+        {.Key = M10_CFG_ITM_KEY_TP_LEN_TP1, .Value = hm10->DeviceConfig.TimePulse.PulseLengthMicroSeconds},
+        {.Key = M10_CFG_ITM_KEY_TP_LEN_LOCK_TP1, .Value = hm10->DeviceConfig.TimePulse.PulseLengthLockedMicroSeconds},
+        {.Key = M10_CFG_ITM_KEY_TP_POL_TP1, .Value = hm10->DeviceConfig.TimePulse.RisingEdgePolarity},
     };
 
     if ((err_m10 = M10_SendConfig(hm10, communication_config, sizeof(communication_config) / sizeof(communication_config[0]), hm10->DeviceConfig.ConfigLayers, 0)) != M10_ERROR_OK) {
@@ -202,9 +211,12 @@ M10_ErrorTypeDef M10_SendConfig(M10_HandleTypeDef *hm10, M10_ConfigDataTypeDef *
 
     uint16_t idx = 0;
 
-    // Enable UBX config mode
-    UBX_ToggleConfigMode(&hm10->hubx, 1);
-
+    // Handle only ACK/NACK UBX message
+    UBX_MsgFilterTypeDef permitted_msg_ids[2] = {
+        {.Class = M10_UBX_CLASS_ACK, .MessageId = M10_UBX_ID_ACK_ACK},
+{.Class = M10_UBX_CLASS_ACK, .MessageId = M10_UBX_ID_ACK_NACK}
+    };
+    UBX_SetPermittedMsgs(&hm10->hubx, permitted_msg_ids, 2);
 
     cfg_buffer[idx++] = 0x00;                       // Version
     cfg_buffer[idx++] = Layers;
@@ -234,8 +246,8 @@ M10_ErrorTypeDef M10_SendConfig(M10_HandleTypeDef *hm10, M10_ConfigDataTypeDef *
         .Length = idx
     };
     if (UBX_AssignMessagePayloadPoolItem(&hm10->hubx, &ubx_message) != UBX_ERROR_OK) {
-        // Disable UBX config mode
-        UBX_ToggleConfigMode(&hm10->hubx, 0);
+        // Clear UBX message ids filter
+        UBX_ResetPermittedMsgs(&hm10->hubx);
 
         return M10_ERROR_UBX_PAYLOAD;
     }
@@ -244,8 +256,8 @@ M10_ErrorTypeDef M10_SendConfig(M10_HandleTypeDef *hm10, M10_ConfigDataTypeDef *
     UBX_ErrorTypeDef ubx_err;
     if ((ubx_err = UBX_SendMsgConfig(&hm10->hubx, &ubx_message, SkipAck)) != UBX_ERROR_OK) {
 
-        // Disable UBX config mode
-        UBX_ToggleConfigMode(&hm10->hubx, 0);
+        // Clear UBX message ids filter
+        UBX_ResetPermittedMsgs(&hm10->hubx);
 
         UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
         return M10_ERROR_UBX;
@@ -253,8 +265,8 @@ M10_ErrorTypeDef M10_SendConfig(M10_HandleTypeDef *hm10, M10_ConfigDataTypeDef *
 
     UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
 
-    // Disable UBX config mode
-    UBX_ToggleConfigMode(&hm10->hubx, 0);
+    // Clear UBX message ids filter
+    UBX_ResetPermittedMsgs(&hm10->hubx);
 
     return M10_ERROR_OK;
 }
@@ -440,8 +452,8 @@ M10_ErrorTypeDef M10_SetUTC(M10_HandleTypeDef *hm10, uint64_t TimestampMs, uint1
     };
 
     uint8_t payload[24] = {0};
-    payload[0] = 0x10;                                              // MGA INI Message type
-    payload[1] = 0x00;                                              // MGA INI Message version
+    payload[0] = 0x10;                                              // MGA-INI-TIME Message type
+    payload[1] = 0x00;                                              // MGA-INI Message version
     payload[2] = 0x00;                                              // Apply on message receipt
     payload[3] = 0x80;                                              // Receiver will handle the number of leap seconds after 1980
     payload[4] = utc_time.Year & 0xFF;                              // Year
@@ -488,11 +500,12 @@ M10_ErrorTypeDef M10_SetUTC(M10_HandleTypeDef *hm10, uint64_t TimestampMs, uint1
 /**
  * @brief Requests all navigation data from the device. This can be used to store the data in persistent storage.
  * @param hm10 Device handle
- * @param HandleDataMessage Function to handle the received message from the device (e.g., store data in flash)
- * @param DataLen The total length of all data chunks
+ * @param HandleDataMessage Function to handle the received chunk from the device (e.g., store data in flash)
+ * @param TotalChunks (optional) The total count of all data chunks sent
  * @param TimeoutMs Timeout in milliseconds
  */
-M10_ErrorTypeDef M10_ExportNavData(M10_HandleTypeDef *hm10, uint8_t(*HandleDataMessage)(uint8_t *ChunkContent, uint32_t Len), uint32_t *DataLen, uint32_t TimeoutMs) {
+M10_ErrorTypeDef M10_ExportNavData(M10_HandleTypeDef *hm10, uint8_t(*HandleDataMessage)(M10_ExportDataChunkTypeDef *ExportDataChunk), uint32_t *TotalChunks, uint32_t TimeoutMs) {
+    M10_ErrorTypeDef m10_err = M10_ERROR_OK;
     uint32_t start = UBX_GetTickMsCB();
     UBX_MessageTypeDef ubx_message = {
         .Class = M10_UBX_CLASS_MGA,
@@ -500,9 +513,20 @@ M10_ErrorTypeDef M10_ExportNavData(M10_HandleTypeDef *hm10, uint8_t(*HandleDataM
         .Length = 0,
     };
 
+    // Handle only ACK/NACK, MGA-DBD and MGA-ACK UBX message
+    UBX_MsgFilterTypeDef permitted_msgs[4] = {
+        {.Class = M10_UBX_CLASS_ACK, .MessageId = M10_UBX_ID_ACK_ACK},
+        {.Class = M10_UBX_CLASS_ACK, .MessageId = M10_UBX_ID_ACK_NACK},
+        {.Class = M10_UBX_CLASS_MGA, .MessageId = M10_UBX_ID_MGA_ACK},
+        {.Class = M10_UBX_CLASS_MGA, .MessageId = M10_UBX_ID_MGA_DBD}
+    };
+    UBX_SetPermittedMsgs(&hm10->hubx, permitted_msgs, 4);
+
     if (UBX_SendMsg(&hm10->hubx, &ubx_message) != UBX_ERROR_OK) {
         UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
-        return M10_ERROR_UBX;
+
+        m10_err = M10_ERROR_UBX;
+        goto finish_export;
     }
 
     UBX_MsgFilterTypeDef msg_filters[2] = {
@@ -511,50 +535,69 @@ M10_ErrorTypeDef M10_ExportNavData(M10_HandleTypeDef *hm10, uint8_t(*HandleDataM
     };
 
     UBX_MessageTypeDef resp;
-    uint32_t total_data_len = 0;
+    uint32_t total_chunks = 0;
     while (1) {
         uint32_t elapsed = UBX_GetTickMsCB() - start;
-        if (elapsed > TimeoutMs) return M10_ERROR_TIMEOUT;
+        if (elapsed > TimeoutMs) {
+            m10_err = M10_ERROR_TIMEOUT;
+            goto finish_export;
+        }
 
         uint32_t remaining = TimeoutMs - elapsed;
-        if (UBX_WaitForMessage(&hm10->hubx, msg_filters, 2, remaining, &resp) != UBX_ERROR_OK) {
-            return M10_ERROR_UBX;
+
+        UBX_ErrorTypeDef ubx_err = UBX_ERROR_OK;
+        if ((ubx_err = UBX_WaitForMessage(&hm10->hubx, msg_filters, 2, remaining, &resp)) != UBX_ERROR_OK) {
+            m10_err = M10_ERROR_UBX;
+            goto finish_export;
         };
 
         if (resp.MessageId == M10_UBX_ID_MGA_ACK) {
             // Export finished
             M10_MgaMessageAckInfoCodeTypeDef info_code = resp.PayloadPoolItem->Payload[2];
-            if (info_code != M10_MGA_ACK_ACCEPTED) {
-                UBX_ReleaseMessage(&hm10->hubx, &resp);
-                return M10_ERROR_MGA_NOT_ACCEPTED;
-            }
-            *DataLen = total_data_len;
-            break;
+            if (info_code == M10_MGA_ACK_ACCEPTED) {
+                *TotalChunks = total_chunks;
+            } else {
+                m10_err = M10_ERROR_MGA_NOT_ACCEPTED;;
+            };
+
+            UBX_ReleaseMessage(&hm10->hubx, &resp);
+            goto finish_export;
         };
 
         if (resp.MessageId == M10_UBX_ID_MGA_DBD) {
-            uint32_t msg_len = 6 + resp.Length + 2;
-            uint8_t msg_buffer[172];                // UBX-MGA-DBD message can be maximum of 172 bytes
-            msg_buffer[0] = 0xB5;
-            msg_buffer[1] = 0x62;
-            msg_buffer[2] = resp.Class;
-            msg_buffer[3] = resp.MessageId;
-            msg_buffer[4] = resp.Length & 0xFF;
-            msg_buffer[5] = (resp.Length >> 8) & 0xFF;
-            memcpy(&msg_buffer[6], resp.PayloadPoolItem->Payload, resp.Length);
-            msg_buffer[6 + resp.Length] = resp.Checksum.Cka;
-            msg_buffer[7 + resp.Length] = resp.Checksum.Ckb;
+            // Prepend a 2-byte length to each payload chunk
+            if (resp.Length + 2 > resp.PayloadPoolItem->Length) return M10_ERROR_UBX_PAYLOAD;
 
-            if (HandleDataMessage(msg_buffer, msg_len) != 0) {
+            // Shift payload to the right...
+            memmove(resp.PayloadPoolItem->Payload + 2, resp.PayloadPoolItem->Payload, resp.Length);
+
+            uint8_t len[2] = {(resp.Length & 0xFF), ((resp.Length >> 8) & 0xFF)};
+            memcpy(resp.PayloadPoolItem->Payload, len, 2);
+
+            M10_ExportDataChunkTypeDef export_data = {
+                .Data = resp.PayloadPoolItem->Payload,
+                .Len = resp.Length + 2
+            };
+
+            if (HandleDataMessage(&export_data) != 0) {
                 UBX_ReleaseMessage(&hm10->hubx, &resp);
-                return M10_ERROR_MGA_DATA_NOT_HANDLED;
+
+                m10_err = M10_ERROR_MGA_DATA_NOT_HANDLED;
+                goto finish_export;
             }
+
             UBX_ReleaseMessage(&hm10->hubx, &resp);
-            total_data_len += msg_len;
+            total_chunks++;
+            continue;
         }
+
+        UBX_ReleaseMessage(&hm10->hubx, &resp);
     }
-    UBX_ReleaseMessage(&hm10->hubx, &resp);
-    return M10_ERROR_OK;
+
+finish_export:
+    // Clear UBX messages filter
+    UBX_ResetPermittedMsgs(&hm10->hubx);
+    return m10_err;
 }
 
 /**
@@ -566,34 +609,165 @@ M10_ErrorTypeDef M10_ExportNavData(M10_HandleTypeDef *hm10, uint8_t(*HandleDataM
  */
 M10_ErrorTypeDef M10_ImportNavData(M10_HandleTypeDef *hm10, uint8_t *Data, uint32_t DataLen,
                                    uint32_t TimeoutMs) {
-    M10_ErrorTypeDef m10_err;
-    UBX_ErrorTypeDef ubx_err;
+    M10_ErrorTypeDef m10_err = M10_ERROR_OK;
+    UBX_ErrorTypeDef ubx_err = UBX_ERROR_OK;
+
+    // Handle only ACK/NACK, MGA-DBD and MGA-ACK UBX message
+    UBX_MsgFilterTypeDef permitted_msgs[4] = {
+        {.Class = M10_UBX_CLASS_ACK, .MessageId = M10_UBX_ID_ACK_ACK},
+        {.Class = M10_UBX_CLASS_ACK, .MessageId = M10_UBX_ID_ACK_NACK},
+        {.Class = M10_UBX_CLASS_MGA, .MessageId = M10_UBX_ID_MGA_ACK},
+        {.Class = M10_UBX_CLASS_MGA, .MessageId = M10_UBX_ID_MGA_DBD}
+    };
+    UBX_SetPermittedMsgs(&hm10->hubx, permitted_msgs, 4);
 
     uint32_t offset = 0;
 
     while (offset < DataLen) {
-        if (Data[offset] != 0xB5 || Data[offset + 1] != 0x62) {
-            return M10_ERROR_INVALID_IMPORT_DATA;
+        if (offset + 2 > DataLen) {
+            m10_err = M10_ERROR_INVALID_IMPORT_DATA;
+            goto finish_import;
+        }
+        uint16_t payload_length = (Data[offset]) | (Data[offset + 1] << 8);
+        offset += 2;
+
+        if (offset + payload_length > DataLen) {
+            m10_err = M10_ERROR_INVALID_IMPORT_DATA;
+            goto finish_import;
         }
 
-        uint16_t payload_len = Data[offset + 4] | ((uint16_t)Data[offset + 5] << 8);
-        uint32_t msg_len = 6 + payload_len + 2;  // header + payload + checksum
-
-        if (offset + msg_len > DataLen) return M10_ERROR_INVALID_IMPORT_DATA;
-
-        if ((ubx_err = UBX_SendMsgRaw(&hm10->hubx, &Data[offset])) != UBX_ERROR_OK) {
-            return M10_ERROR_UBX;
+        UBX_MessageTypeDef ubx_message = {
+            .Class = M10_UBX_CLASS_MGA,
+            .MessageId = M10_UBX_ID_MGA_DBD,
+            .Length = payload_length
         };
 
+        if ((ubx_err = UBX_AssignMessagePayloadPoolItem(&hm10->hubx, &ubx_message)) != UBX_ERROR_OK) {
+            m10_err = M10_ERROR_UBX_PAYLOAD;
+            goto finish_import;
+        };
+
+        memcpy(ubx_message.PayloadPoolItem->Payload, &Data[offset], payload_length);
+
+        UBX_CalculateChecksum(&ubx_message, &ubx_message.Checksum.Cka, &ubx_message.Checksum.Ckb);
+
+        // Send chunk to device
+        if ((ubx_err = UBX_SendMsg(&hm10->hubx, &ubx_message)) != UBX_ERROR_OK) {
+            UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
+            m10_err = M10_ERROR_UBX;
+            goto finish_import;
+        }
+
         M10_MgaMessageAckInfoCodeTypeDef info_code;
-        if ((m10_err = wait_for_mga_ack(hm10, &info_code, TimeoutMs)) != M10_ERROR_OK) return m10_err;
+        if ((m10_err = wait_for_mga_ack(hm10, &info_code, TimeoutMs)) != M10_ERROR_OK) {
+            UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
+            goto finish_import;
+        }
 
-        if (info_code != M10_MGA_ACK_ACCEPTED && info_code != M10_MGA_ACK_INFO_NOT_STORED) return M10_ERROR_MGA_NOT_ACCEPTED;
+        if (info_code != M10_MGA_ACK_ACCEPTED && info_code != M10_MGA_ACK_INFO_NOT_STORED) {
+            UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
 
-        offset += msg_len;
+            m10_err = M10_ERROR_MGA_NOT_ACCEPTED;
+            goto finish_import;
+        }
+
+        UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
+        offset += payload_length;
     }
 
-    return M10_ERROR_OK;
+finish_import:
+    // Clear UBX messages filter
+    UBX_ResetPermittedMsgs(&hm10->hubx);
+
+    return m10_err;
+}
+
+/**
+ * @brief Imports the last known position to the GNSS module, which could improve the time to first fix
+ * @param hm10 M10 Handle
+ * @param Latitude Last known latitude
+ * @param Longitude Last known longitude
+ * @param Altitude Last known altitude
+ * @param PosAccuracyCm Position accuracy in centimeters
+ * @param TimeoutMs Timeout
+ */
+M10_ErrorTypeDef M10_ImportLastKnownPos(M10_HandleTypeDef *hm10, int32_t Latitude, int32_t Longitude,
+                                        int32_t Altitude, uint32_t PosAccuracyCm, uint32_t TimeoutMs) {
+    M10_ErrorTypeDef m10_err = M10_ERROR_OK;
+    UBX_ErrorTypeDef ubx_err = UBX_ERROR_OK;
+
+    // Handle only ACK/NACK and MGA-ACK UBX message
+    UBX_MsgFilterTypeDef permitted_msgs[4] = {
+        {.Class = M10_UBX_CLASS_ACK, .MessageId = M10_UBX_ID_ACK_ACK},
+        {.Class = M10_UBX_CLASS_ACK, .MessageId = M10_UBX_ID_ACK_NACK},
+        {.Class = M10_UBX_CLASS_MGA, .MessageId = M10_UBX_ID_MGA_ACK}
+    };
+    UBX_SetPermittedMsgs(&hm10->hubx, permitted_msgs, 4);
+
+    uint8_t payload[20] = {
+        0x01,                               // MGA-INI-POS-LLH Message type
+        0x00,                               // MGA-INI Message version
+        0x00,                               // Reserved
+        0x00,                               // Reserved
+    };
+
+    payload[4] = Latitude & 0xFF;
+    payload[5] = (Latitude >> 8) & 0xFF;
+    payload[6] = (Latitude >> 16) & 0xFF;
+    payload[7] = (Latitude >> 24) & 0xFF;
+
+    payload[8] = Longitude & 0xFF;
+    payload[9] = (Longitude >> 8) & 0xFF;
+    payload[10] = (Longitude >> 16) & 0xFF;
+    payload[11] = (Longitude >> 24) & 0xFF;
+
+    payload[12] = Altitude & 0xFF;
+    payload[13] = (Altitude >> 8) & 0xFF;
+    payload[14] = (Altitude >> 16) & 0xFF;
+    payload[15] = (Altitude >> 24) & 0xFF;
+
+    payload[16] = PosAccuracyCm & 0xFF;
+    payload[17] = (PosAccuracyCm >> 8) & 0xFF;
+    payload[18] = (PosAccuracyCm >> 16) & 0xFF;
+    payload[19] = (PosAccuracyCm >> 24) & 0xFF;
+
+    UBX_MessageTypeDef ubx_message = {
+        .Class = M10_UBX_CLASS_MGA,
+        .MessageId = M10_UBX_ID_MGA_INI,
+        .Length = sizeof(payload) / sizeof(payload[0])
+    };
+
+    if ((ubx_err = UBX_AssignMessagePayloadPoolItem(&hm10->hubx, &ubx_message)) != UBX_ERROR_OK) {
+        m10_err = M10_ERROR_UBX;
+        goto finish_import;
+    }
+
+    memcpy(ubx_message.PayloadPoolItem->Payload, payload, ubx_message.Length);
+
+    if ((ubx_err = UBX_SendMsg(&hm10->hubx, &ubx_message)) != UBX_ERROR_OK) {
+        UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
+        m10_err = M10_ERROR_UBX;
+        goto finish_import;
+    }
+
+    M10_MgaMessageAckInfoCodeTypeDef info_code;
+    if ((m10_err = wait_for_mga_ack(hm10, &info_code, TimeoutMs)) != M10_ERROR_OK) {
+        UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
+        goto finish_import;
+    }
+
+    if (info_code != M10_MGA_ACK_ACCEPTED && info_code != M10_MGA_ACK_INFO_NOT_STORED) {
+        UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
+
+        m10_err = M10_ERROR_MGA_NOT_ACCEPTED;
+    }
+
+    UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
+finish_import:
+    // Clear UBX messages filter
+    UBX_ResetPermittedMsgs(&hm10->hubx);
+
+    return m10_err;
 }
 
 /**

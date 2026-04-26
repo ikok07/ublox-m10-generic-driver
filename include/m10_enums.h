@@ -47,7 +47,7 @@ typedef enum {
 typedef enum {
     /* ACK (0x05) */
     M10_UBX_ID_ACK_ACK          = 0x01,
-    M10_UBX_ID_ACK_NAK          = 0x00,
+    M10_UBX_ID_ACK_NACK          = 0x00,
 
     /* CFG (0x06) */
     M10_UBX_ID_CFG_OTP          = 0x41,
