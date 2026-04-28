@@ -31,7 +31,7 @@ typedef struct {
     uint8_t Minute;
     uint8_t Second;
     uint32_t Nanosecond;
-} M10_ParsedTimestampMsTypeDef;
+} M10_DateTimeTypeDef;
 
 typedef struct {
     M10_DeviceFixTypeDef Fix;
@@ -107,7 +107,8 @@ M10_ErrorTypeDef M10_SetBaudRate(M10_HandleTypeDef *hm10, UBX_BaudRateTypeDef Ba
 
 /* ------ MGA Messages ------ */
 
-M10_ErrorTypeDef M10_SetUTC(M10_HandleTypeDef *hm10, uint64_t TimestampMs, uint16_t SAccuracy, uint32_t NSAccuracy, uint32_t TimeoutMs);
+M10_ErrorTypeDef M10_SetUTC(M10_HandleTypeDef *hm10, M10_DateTimeTypeDef *DateTime, uint16_t SAccuracy, uint32_t NSAccuracy, uint32_t TimeoutMs);
+M10_ErrorTypeDef M10_SetUTCTimestamp(M10_HandleTypeDef *hm10, uint64_t TimestampMs, uint16_t SAccuracy, uint32_t NSAccuracy, uint32_t TimeoutMs);
 M10_ErrorTypeDef M10_ExportNavData(M10_HandleTypeDef *hm10, uint8_t(*HandleDataMessage)(M10_ExportDataChunkTypeDef *ExportData), uint32_t *TotalChunks, uint32_t TimeoutMs);
 M10_ErrorTypeDef M10_ImportNavData(M10_HandleTypeDef *hm10, uint8_t *Data, uint32_t DataLen, uint32_t TimeoutMs);
 M10_ErrorTypeDef M10_ImportLastKnownPos(M10_HandleTypeDef *hm10, int32_t Latitude, int32_t Longitude, int32_t Altitude, uint32_t PosAccuracyCm, uint32_t TimeoutMs);

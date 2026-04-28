@@ -8,7 +8,7 @@
 #include <time.h>
 
 static uint8_t get_cfg_value_size(uint32_t key);
-static M10_ErrorTypeDef parse_timestamp_ms(uint64_t TimestampMs, M10_ParsedTimestampMsTypeDef *ParsedTimestamp);
+static M10_ErrorTypeDef parse_timestamp_ms(uint64_t TimestampMs, M10_DateTimeTypeDef *ParsedTimestamp);
 static M10_ErrorTypeDef wait_for_mga_ack(M10_HandleTypeDef *hm10, M10_MgaMessageAckInfoCodeTypeDef *AckInfoCode, uint32_t TimeoutMs);
 
 /**
@@ -46,13 +46,13 @@ M10_ErrorTypeDef M10_Init(M10_HandleTypeDef *hm10) {
         {.Key = M10_CFG_ITM_KEY_UART1OUTPROT_NMEA, .Value = hm10->DeviceConfig.NMEAOutputMessages > 0},
 
         // Configure Time Pulse
-        {.Key = M10_CFG_ITM_KEY_TP_TP1_ENA, .Value = hm10->DeviceConfig.TimePulse.Enabled},
-        {.Key = M10_CFG_ITM_KEY_TP_SYNC_GNSS_TP1, .Value = hm10->DeviceConfig.TimePulse.SyncWithGNSS},
-        {.Key = M10_CFG_ITM_KEY_TP_PERIOD_TP1, .Value = hm10->DeviceConfig.TimePulse.PeriodMicroSeconds},
-        {.Key = M10_CFG_ITM_KEY_TP_PERIOD_LOCK_TP1, .Value = hm10->DeviceConfig.TimePulse.PeriodLockedMicroSeconds},
-        {.Key = M10_CFG_ITM_KEY_TP_LEN_TP1, .Value = hm10->DeviceConfig.TimePulse.PulseLengthMicroSeconds},
-        {.Key = M10_CFG_ITM_KEY_TP_LEN_LOCK_TP1, .Value = hm10->DeviceConfig.TimePulse.PulseLengthLockedMicroSeconds},
-        {.Key = M10_CFG_ITM_KEY_TP_POL_TP1, .Value = hm10->DeviceConfig.TimePulse.RisingEdgePolarity},
+        // {.Key = M10_CFG_ITM_KEY_TP_TP1_ENA, .Value = hm10->DeviceConfig.TimePulse.Enabled},
+        // {.Key = M10_CFG_ITM_KEY_TP_SYNC_GNSS_TP1, .Value = hm10->DeviceConfig.TimePulse.SyncWithGNSS},
+        // {.Key = M10_CFG_ITM_KEY_TP_PERIOD_TP1, .Value = hm10->DeviceConfig.TimePulse.PeriodMicroSeconds},
+        // {.Key = M10_CFG_ITM_KEY_TP_PERIOD_LOCK_TP1, .Value = hm10->DeviceConfig.TimePulse.PeriodLockedMicroSeconds},
+        // {.Key = M10_CFG_ITM_KEY_TP_LEN_TP1, .Value = hm10->DeviceConfig.TimePulse.PulseLengthMicroSeconds},
+        // {.Key = M10_CFG_ITM_KEY_TP_LEN_LOCK_TP1, .Value = hm10->DeviceConfig.TimePulse.PulseLengthLockedMicroSeconds},
+        // {.Key = M10_CFG_ITM_KEY_TP_POL_TP1, .Value = hm10->DeviceConfig.TimePulse.RisingEdgePolarity},
     };
 
     if ((err_m10 = M10_SendConfig(hm10, communication_config, sizeof(communication_config) / sizeof(communication_config[0]), hm10->DeviceConfig.ConfigLayers, 0)) != M10_ERROR_OK) {
@@ -366,7 +366,7 @@ M10_ErrorTypeDef M10_Reset(M10_HandleTypeDef *hm10, M10_NavBbrMaskTypeDef BbrMas
     if (UBX_AssignMessagePayloadPoolItem(&hm10->hubx, &ubx_message) != UBX_ERROR_OK) {
         return M10_ERROR_UBX_PAYLOAD;
     }
-    memcpy(ubx_message.PayloadPoolItem->Payload, payload, sizeof(payload) / sizeof(payload[0]));
+    memcpy(ubx_message.PayloadPoolItem->Payload, payload, sizeof(payload));
 
     if (UBX_SendMsg(&hm10->hubx, &ubx_message) != UBX_ERROR_OK) {
         UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
@@ -429,13 +429,13 @@ M10_ErrorTypeDef M10_SetBaudRate(M10_HandleTypeDef *hm10, UBX_BaudRateTypeDef Ba
 /**
  * @brief Sets the current UTC time in the device.
  * @param hm10 Device Handle
- * @param TimestampMs Epoch timestamp in milliseconds
+ * @param DateTime DateTime structure
  * @param SAccuracy Seconds accuracy
  * @param NSAccuracy Nanoseconds accuracy
- * @warning This method MUST be called before sending any other MGA messages
  */
-M10_ErrorTypeDef M10_SetUTC(M10_HandleTypeDef *hm10, uint64_t TimestampMs, uint16_t SAccuracy, uint32_t NSAccuracy, uint32_t TimeoutMs) {
-    M10_ErrorTypeDef m10_err = M10_ERROR_OK;
+M10_ErrorTypeDef M10_SetUTC(M10_HandleTypeDef *hm10, M10_DateTimeTypeDef *DateTime, uint16_t SAccuracy, uint32_t NSAccuracy,
+    uint32_t TimeoutMs) {
+M10_ErrorTypeDef m10_err = M10_ERROR_OK;
     UBX_MessageTypeDef ubx_message = {
         .Class = M10_UBX_CLASS_MGA,
         .MessageId = M10_UBX_ID_MGA_INI,
@@ -445,29 +445,23 @@ M10_ErrorTypeDef M10_SetUTC(M10_HandleTypeDef *hm10, uint64_t TimestampMs, uint1
         return M10_ERROR_UBX_PAYLOAD;
     }
 
-    M10_ParsedTimestampMsTypeDef utc_time;
-    if ((m10_err = parse_timestamp_ms(TimestampMs, &utc_time)) != M10_ERROR_OK) {
-        UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
-        return m10_err;
-    };
-
     uint8_t payload[24] = {0};
-    payload[0] = 0x10;                                              // MGA-INI-TIME Message type
-    payload[1] = 0x00;                                              // MGA-INI Message version
+    payload[0] = 0x10;                                              // MGA-INI-TIME_UTC Message type
+    payload[1] = 0x00;                                              // MGA-INI1 Message version
     payload[2] = 0x00;                                              // Apply on message receipt
     payload[3] = 0x80;                                              // Receiver will handle the number of leap seconds after 1980
-    payload[4] = utc_time.Year & 0xFF;                              // Year
-    payload[5] = (utc_time.Year >> 8) & 0xFF;
-    payload[6] = utc_time.Month;                                    // Month
-    payload[7] = utc_time.Day;                                      // Day
-    payload[8] = utc_time.Hour;                                     // Hour
-    payload[9] = utc_time.Minute;                                   // Minute
-    payload[10] = utc_time.Second;                                  // Second
+    payload[4] = DateTime->Year & 0xFF;                              // Year
+    payload[5] = (DateTime->Year >> 8) & 0xFF;
+    payload[6] = DateTime->Month;                                    // Month
+    payload[7] = DateTime->Day;                                      // Day
+    payload[8] = DateTime->Hour;                                     // Hour
+    payload[9] = DateTime->Minute;                                   // Minute
+    payload[10] = DateTime->Second;                                  // Second
     payload[11] = 0x01;                                             // Trusted source
-    payload[12] = utc_time.Nanosecond & 0xFF;                       // Nanosecond
-    payload[13] = (utc_time.Nanosecond >> 8) & 0xFF;
-    payload[14] = (utc_time.Nanosecond >> 16) & 0xFF;
-    payload[15] = (utc_time.Nanosecond >> 24) & 0xFF;
+    payload[12] = DateTime->Nanosecond & 0xFF;                       // Nanosecond
+    payload[13] = (DateTime->Nanosecond >> 8) & 0xFF;
+    payload[14] = (DateTime->Nanosecond >> 16) & 0xFF;
+    payload[15] = (DateTime->Nanosecond >> 24) & 0xFF;
     payload[16] = SAccuracy & 0xFF;                                 // Seconds part of time accuracy
     payload[17] = (SAccuracy >> 8) & 0xFF;
     payload[20] = NSAccuracy & 0xFF;                                // Nanoseconds part of time accuracy
@@ -495,6 +489,24 @@ M10_ErrorTypeDef M10_SetUTC(M10_HandleTypeDef *hm10, uint64_t TimestampMs, uint1
 
     UBX_ReleaseMessage(&hm10->hubx, &ubx_message);
     return M10_ERROR_OK;
+}
+
+/**
+ * @brief Sets the current UTC time in the device using a provided timestamp in ms.
+ * @param hm10 Device Handle
+ * @param TimestampMs Epoch timestamp in milliseconds
+ * @param SAccuracy Seconds accuracy
+ * @param NSAccuracy Nanoseconds accuracy
+ */
+M10_ErrorTypeDef M10_SetUTCTimestamp(M10_HandleTypeDef *hm10, uint64_t TimestampMs, uint16_t SAccuracy, uint32_t NSAccuracy, uint32_t TimeoutMs) {
+    M10_ErrorTypeDef m10_err = M10_ERROR_OK;
+
+    M10_DateTimeTypeDef date_time;
+    if ((m10_err = parse_timestamp_ms(TimestampMs, &date_time)) != M10_ERROR_OK) {
+        return m10_err;
+    };
+
+    return M10_SetUTC(hm10, &date_time, SAccuracy, NSAccuracy, TimeoutMs);
 }
 
 /**
@@ -785,7 +797,7 @@ uint8_t get_cfg_value_size(uint32_t key) {
     }
 }
 
-M10_ErrorTypeDef parse_timestamp_ms(uint64_t TimestampMs, M10_ParsedTimestampMsTypeDef *ParsedTimestamp) {
+M10_ErrorTypeDef parse_timestamp_ms(uint64_t TimestampMs, M10_DateTimeTypeDef *ParsedTimestamp) {
     time_t unix_seconds = TimestampMs / 1000;
     struct tm *t = gmtime(&unix_seconds);
     if (t == NULL) return M10_ERROR_INVALID_TIMESTAMP;
